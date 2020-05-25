@@ -1,0 +1,496 @@
+#+TITLE: My literate Emacs config
+* Inspiration
+
+Started keeping track of this as of 5/23/2020. Where things I added before that came from are anyone's guess.
+
+[[https://explog.in/dot/emacs/config.html][expLog (Kunal Bhalla)]]:
+- Literate config
+- Disabling most of the GUI early on
+- Better mouse settings
+- Better theme loading
+- Only showing line numbers in programming modes
+* Packages
+
+Install packages via ~straight.el~.
+
+#+BEGIN_SRC emacs-lisp
+(straight-use-package 'all-the-icons)
+(straight-use-package 'company)
+(straight-use-package 'counsel)
+(straight-use-package 'csv-mode)
+(straight-use-package 'edbi)
+(straight-use-package 'slack)
+(straight-use-package 'ein)
+(straight-use-package 'fill-column-indicator)
+(straight-use-package 'haskell-mode)
+(straight-use-package 'ivy)
+(straight-use-package 'js2-mode)
+(straight-use-package 'magit)
+(straight-use-package 'markdown-mode)
+(straight-use-package 'neotree)
+(straight-use-package 'olivetti)
+(straight-use-package 'org)
+(straight-use-package 'org-bullets)
+(straight-use-package 'org-pomodoro)
+(straight-use-package 'poet-theme)
+(straight-use-package 'projectile)
+(straight-use-package 'projectile-ripgrep)
+(straight-use-package 'rust-mode)
+(straight-use-package 'smartparens)
+(straight-use-package 'swiper)
+(straight-use-package 'undo-tree)
+(straight-use-package 'use-package)
+(straight-use-package 'web-mode)
+(straight-use-package 'yaml-mode)
+
+(straight-use-package
+ '(el-patch :type git
+            :host github
+            :repo "edran/hc-zenburn-emacs"))
+#+END_SRC
+
+* Basic config
+** Minimal UI
+Disable most of the UI early, to get flickering done with.
+#+begin_src emacs-lisp
+  (if (boundp 'tool-bar-mode)
+      (tool-bar-mode -1))
+  (if (boundp 'menu-bar-mode)
+      (menu-bar-mode -1))
+  (if (boundp 'fringe-mode)
+      (fringe-mode -1))
+  (if (boundp 'scroll-bar-modee)
+      (scroll-bar-mode -1))
+#+end_src
+
+** Set default margins
+#+begin_src emacs-lisp
+  (setq-default left-margin-width 1 right-margin-width 1)
+#+end_src
+
+** Mouse settings
+#+begin_src emacs-lisp
+  (setq mouse-wheel-progressive-speed nil)
+  (setq focus-follows-mouse "auto-raise")
+  (setq mouse-autoselect-window 't)
+#+end_src
+
+** Better theme loading
+This disables the last theme before loading the new one, instead of layering them.
+
+#+begin_src emacs-lisp
+(defadvice load-theme (before clear-previous-themes activate)
+  (mapc #'disable-theme custom-enabled-themes))
+#+end_src
+
+** Theme
+#+begin_src emacs-lisp
+  (setq my-default-theme 'hc-zenburn)
+  (load-theme my-default-theme t)
+#+end_src
+** Get rid of extra startup stuff
+#+begin_src emacs-lisp
+  (setq inhibit-startup-message t)
+  (setq inhibit-startup-message t)
+  (setq initial-scratch-message nil)
+#+end_src
+
+** Enable undo/redo with buffer layouts
+#+begin_src emacs-lisp
+  (winner-mode t)
+#+end_src
+
+** Settings for programming modes only
+#+begin_src emacs-lisp
+(add-hook 'prog-mode-hook
+          (lambda ()
+            (display-line-numbers-mode)
+            ;; Show fill line indicator at column 99
+            (fci-mode)
+            (setq fci-rule-column 99)
+            (show-paren-mode t)
+            (variable-pitch-mode 0)
+            (load-theme my-default-theme)))
+#+end_src
+
+** Add the local ~load-path~, so that we can load customization files.
+
+#+begin_src emacs-lisp
+  (add-to-list 'load-path (concat user-emacs-directory "lisp"))
+#+end_src
+
+** Put customizations in a different file
+#+begin_src emacs-lisp
+  (setq custom-file (concat user-emacs-directory "custom.el"))
+  (load custom-file)
+#+end_src
+
+** Turn off the bell
+#+begin_src emacs-lisp
+  (setq ring-bell-function 'ignore) 
+#+end_src
+
+** Disable tabs
+#+begin_src emacs-lisp
+  (setq-default indent-tabs-mode nil)
+#+end_src
+
+** Enable deleting selected text
+#+begin_src emacs-lisp
+  (delete-selection-mode 1)
+#+end_src
+
+** Automatch parens, quotes, etc
+#+begin_src emacs-lisp
+  (electric-pair-mode 1)  ;; Autocomplete quotes, parens, etc
+#+end_src
+** Line wrapping just the way I like it
+#+begin_src emacs-lisp
+  (add-hook 'text-mode-hook #'turn-on-visual-line-mode)
+#+end_src
+
+** Keybindings
+#+begin_src emacs-lisp
+  ;; Invoke M-x without Alt key
+  (global-set-key (kbd "C-x C-m") 'execute-extended-command)
+  (global-set-key (kbd "C-c C-m") 'execute-extended-command)
+#+end_src
+
+** Backup and autosave settings
+#+begin_src emacs-lisp
+(setq auto-save-default nil)
+(setq auto-save-file-name-transforms
+      `((".*" ,temporary-file-directory t)))
+(setq backup-directory-alist
+      `(("." . ,temporary-file-directory)))
+
+#+end_src
+
+** Aliases
+#+begin_src emacs-lisp
+  (defalias 'qrr 'query-replace-regexp)
+#+end_src
+
+** Functions to rename or delete file /and/ associated buffer
+#+begin_src emacs-lisp
+  (defun rename-file-and-buffer (new-name)
+    "Renames both current buffer and file it's visiting to NEW-NAME.
+     From https://sites.google.com/site/steveyegge2/my-dot-emacs-file."
+    (interactive "sNew name: ")
+    (let ((name (buffer-name))
+          (filename (buffer-file-name)))
+      (if (not filename)
+          (message "Buffer '%s' is not visiting a file!" name)
+        (if (get-buffer new-name)
+            (message "A buffer named '%s' already exists!" new-name)
+          (progn
+            (rename-file filename new-name 1)
+            (rename-buffer new-name)
+            (set-visited-file-name new-name)
+            (set-buffer-modified-p nil))))))
+
+  (defun move-buffer-file (dir)
+    "Moves both current buffer and file it's visiting to DIR.
+     From https://sites.google.com/site/steveyegge2/my-dot-emacs-file."
+    (interactive "DNew directory: ")
+    (let* ((name (buffer-name))
+           (filename (buffer-file-name))
+           (dir
+            (if (string-match dir "\\(?:/\\|\\\\)$")
+                (substring dir 0 -1) dir))
+           (new-name (concat dir "/" name)))
+      (if (not filename)
+          (message "Buffer '%s' is not visiting a file!" name)
+        (progn (copy-file filename new-name 1)
+               (delete-file filename)
+               (set-visited-file-name new-name)
+               (set-buffer-modified-p nil) t))))
+#+end_src
+
+** Filetype/mode mapping
+#+begin_src emacs-lisp
+  (setq auto-mode-alist
+        (append
+         '(("\\.html?\\'" . web-mode)
+           ("\\.jsx?\\'" . js2-mode)
+           ("\\.vue\\'" . web-mode))
+         auto-mode-alist))
+#+end_src
+
+* Languages
+** C/C++
+This is supposed to fix indentation, which it sorta does, but not perfectly.
+#+begin_src emacs-lisp
+  (defun my-c-mode-common-hook ()
+    (c-set-offset 'substatement-open 0)
+
+    (setq c++-tab-always-indent t)
+    (setq c-basic-offset 4)
+    (setq c-indent-level 4))
+  (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
+#+end_src
+** Python
+#+begin_src emacs-lisp
+  (defun my-python-mode-hook ()
+    "Hooks for python-mode."
+    (setq indent-tabs-mode nil)
+    (setq python-indent 4)
+    (setq tab-width 4)
+    (untabify (point-min) (point-max)))
+  (add-hook 'python-mode-hook 'my-python-mode-hook)
+#+end_src
+** HTML/CSS/JS
+#+begin_src emacs-lisp
+  (setq tab-width 2)
+  (setq js-indent-level 2)
+  (setq css-indent-offset 2)
+  (defun my-web-mode-hook ()
+    "Hooks for web-mode."
+    (setq web-mode-markup-indent-offset 2)
+    (setq web-mode-css-indent-offset 2)
+    (setq web-mode-code-indent-offset-2))
+  (add-hook 'web-mode-hook 'my-web-mode-hook)
+#+end_src
+
+* Packages
+** Company mode
+#+begin_src emacs-lisp
+  (add-hook 'after-init-hook 'global-company-mode)
+#+end_src
+** Ivy/Counsel/Swiper
+#+begin_src emacs-lisp
+  (ivy-mode 1)
+  (counsel-mode)
+  (setq ivy-use-virtual-buffers t)
+  (setq ivy-count-format "(%d/%d) ")
+  (setq counsel-find-file-ignore-regexp "\(?:\`[#.]\)\|\(?:[#~]\'\)")
+#+end_src
+** Magit
+#+begin_src emacs-lisp
+  (global-set-key (kbd "C-x g") 'magit)
+#+end_src
+** Neotree
+#+begin_src emacs-lisp
+  (global-set-key (kbd "C-c t t") 'neotree-toggle)
+  (setq neo-autorefresh nil)
+  (setq neo-theme (if (display-graphic-p) 'icons 'arrow))
+#+end_src
+** Projectile
+#+begin_src emacs-lisp
+  (projectile-mode +1)
+  (setq projectile-project-search-path '("~/src/hubg/" "~/src/tomtom/"))
+  (global-set-key (kbd "C-c p") 'projectile-command-map)
+  (global-set-key (kbd "C-c C-f") 'projectile--find-file)
+  (setq projectile-completion-system 'ivy)
+#+end_src
+** Org
+*** Basic settings
+#+begin_src emacs-lisp
+(setq org-basedir "~/org")
+(defun org-subdir (subdir)
+  (concat org-basedir subdir))
+(setq org-startup-indented t)
+(setq truncate-lines nil)
+(setq org-log-done t)
+(setq org-todo-keywords
+      '((sequence "TODO" "IN-PROGRESS" "DONE")))
+(setq org-pretty-entries t)
+(setq org-hide-emphasis-markers t)
+(add-hook 'org-mode-hook
+          (lambda ()
+            (org-toggle-pretty-entities)
+            (variable-pitch-mode 1)
+            (olivetti-mode)
+            (load-theme 'poet)
+            (setq mode-line-format nil)))
+#+end_src
+
+Replace list markers ('-', in my case) with vertically centered dots.
+#+begin_src emacs-lisp
+(font-lock-add-keywords 'org-mode
+                        '(("^ *\\([-]\\) "
+                           (0 (prog1 ()
+                                (compose-region
+                                 (match-beginning 1)
+                                 (match-end 1)
+                                 "•"))))))
+#+end_src
+*** Babel
+**** Better source code window editing
+#+begin_src emacs-lisp
+(setq org-src-window-setup 'other-window)
+#+end_src
+**** Highlight and indent source code blocks
+#+begin_src emacs-lisp
+(setq org-src-fontify-natively t)
+(setq org-src-tab-acts-natively t)
+(setq org-edit-src-content-indentation 0)
+#+end_src
+**** Highlight quotes
+#+begin_src emacs-lisp
+(setq org-fontify-quote-and-verse-blocks t)
+#+end_src
+**** Prevent confirmation before running code blocks
+#+begin_src emacs-lisp
+(setq org-confirm-babel-evaluate nil)
+#+end_src
+**** Use web mode for HTML
+#+begin_src emacs-lisp
+(add-to-list 'org-src-lang-modes
+             '("html" . web))
+#+end_src
+*** UI
+**** Hide formatting markers
+#+begin_src emacs-lisp
+(setq org-hide-emphases-markers t)
+#+end_src
+**** Clean bullets
+#+begin_src emacs-lisp
+(add-hook 'org-mode-hook
+          (lambda ()
+            (org-bullets-mode 1)))
+#+end_src
+**** Display images
+#+begin_src emacs-lisp
+(setq org-startup-with-inline-images t)
+(add-hook
+ 'org-babel-after-execute-hook
+ (lambda ()
+   (when org-inline-image-overlays
+     (org-redisplay-inline-images))))
+#+end_src
+**** Enable auto-fill mode
+#+begin_src emacs-lisp
+(add-hook
+ 'org-mode-hook
+ (lambda ()
+   (auto-fill-mode)))
+#+end_src
+**** 
+*** Keybindings
+#+begin_src emacs-lisp
+  (global-set-key (kbd "C-c l") 'org-store-link)
+  (global-set-key (kbd "C-c a") 'org-agenda)
+  (global-set-key (kbd "C-c c") 'org-capture)
+#+end_src
+
+*** org-roam
+#+begin_src emacs-lisp
+    (use-package org-roam
+      :after org
+      :hook 
+      (after-init . org-roam-mode)
+      :straight (:host github :repo "jethrokuan/org-roam" :branch "develop")
+      :custom
+      (org-roam-directory org-basedir)
+      (org-roam-new-file-directory (org-subdir "/notes"))
+      :bind (:map org-roam-mode-map
+                  (("C-c n l" . org-roam)
+                   ("C-c n f" . org-roam-find-file)
+                   ("C-c n g" . org-roam-show-graph))
+                  :map org-mode-map
+                  (("C-c n i" . org-roam-insert))))
+    (org-roam-mode 1)
+#+end_src
+
+*** org-capture
+#+begin_src emacs-lisp
+    (defun open-new-project-file ()
+      "Used to select the filename to write to when creating a new project file with org-capture."
+      (let ((fpath (read-file-name "Project file name: "
+                                    (org-subdir "/projects")
+                                    nil nil nil)))
+        (find-file fpath)
+        (goto-char (point-min))))
+
+
+    ;; %i = selected text, %a org-store-link, %U created timestamp, %? place cursor here
+    (setq org-capture-templates
+          '(("t" "Todo" entry (file+headline current-journal-filename "Tasks")
+             "* TODO %?\n:LOGBOOK:\n- Created \"TODO\" %U\n:END:\n%i\n%a\n\n" 
+             :empty-lines 1)
+        
+            ("j" "Journal" entry (file+olp+datetree current-journal-filename)
+             "* %? %T\n"
+             :empty-lines 1)
+        
+            ("p" "Project" plain (function open-new-project-file)
+             "#+TITLE: %^{Title}
+    ,,#+FOR: %^{For}
+
+    %^{Description}
+
+    ,,* Resources
+    - %?
+
+
+    ,,* Todo
+    ,,** 
+
+    ,,* Work log / timesheet
+
+    "
+             :kill-buffer nil)
+        
+            ("w" "Project work notes" entry (file+regexp
+                                             (lambda () (buffer-file-name (current-buffer)))
+                                             "Work log \/ timesheet")
+             "** %t
+    ,,*** Worked on / finished:
+    ,,**** 
+    ,,*** Timesheet
+
+    "
+             :prepend t)))
+#+end_src
+
+*** Reload org-mode
+#+begin_src emacs-lisp
+  (org-reload)
+#+end_src
+
+** Slack
+#+begin_src emacs-lisp
+  (use-package slack
+    :commands (slack-start)
+    :init
+    (setq slack-buffer-emojify t)
+    (setq slack-prefer-current-team t)
+    :config
+    (slack-register-team
+     :name "compound-writing"
+     :default t
+     :token "xoxs-950366320022-989923519223-1141965069316-98fc00882d7f06287bfc84ac5f3054015f6869dca647fdb23e4593ea44c167d2"
+     :subscribed-channels '(drafts general ideas intros misc published quotes)
+     :full-and-display-names t))
+#+end_src
+
+** Smartparens
+#+begin_src emacs-lisp
+(add-hook 'prog-mode-hook 'turn-on-smartparens-mode)
+#+end_src
+
+* Things that need to go last 
+** Personal major mode for overriding keybindings in other major modes
+#+begin_src emacs-lisp
+  ;; Custom keybindings that need to override major modes
+  ;; From https://stackoverflow.com/a/683575/3696964
+  (defvar my-keys-minor-mode-map
+    (let ((map (make-sparse-keymap)))
+      (define-key map (kbd "C-c C-f") 'projectile--find-file)
+      map)
+    "my-keys-minor-mode keymap.")
+
+  (define-minor-mode my-keys-minor-mode
+    "A minor mode to make my key settings override annoying major modes."
+    :init-value t
+    :lighter " my-keys"
+    :keymap 'my-keys-minor-mode-map)
+
+  (my-keys-minor-mode 1)
+
+  ;; Prevent my custom keybindings from messing with the minibuffer
+  (defun my-minibuffer-setup-hook ()
+    (my-keys-minor-mode 0))
+  (add-hook 'minibuffer-setup-hook 'my-minibuffer-setup-hook)
+#+end_src

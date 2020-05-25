@@ -1,4 +1,5 @@
 *
 !.gitignore
 !init.el
+!config.org
 !custom.el
